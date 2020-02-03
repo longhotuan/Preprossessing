@@ -41,20 +41,10 @@ library(usethis)
 
 #### Importing and cleaning the dataset #####
 
-# wn_pre <- read_csv("WN_v4.csv", locale = readr::locale(encoding = "latin1"))
-# wn_pre2 <- read_csv("WN_v5.csv", locale = readr::locale(encoding = "latin1"))
-# wn_pre3 <- read_csv("WN_v1.csv", locale = readr::locale(encoding = "latin1"))
 dgd <- read_csv("DGD.csv", locale = readr::locale(encoding = "latin1"))
- 
-# wn_na <- lapply(wn_pre, function(x) sum(is.na(x)))
-# wn_na2 <- lapply(wn_pre2, function(x) sum(is.na(x)))
-# wn_na3 <- lapply(wn_pre3, function(x) sum(is.na(x)))
-
-
 
 # Only choose the column with relevant topics
 dgd_fil <- dgd %>% filter(str_detect(str_to_lower(as.character(SECTOR)),'water|environment|hydro-electric|agricultur|forestry|fish') & `first-year-exp` > 2007)
-
 
 # Remove the columns with too many missing values 
 
@@ -69,9 +59,6 @@ dgd_min <- dgd_fil %>% select(-c(BUDGET_CODE, SERVICE_CODE, OWNER, BUDGETHOLDER_
 # this is to check again the columns with high number of missing values
 
 dgd_min <- dgd_min[,-c(31:58, 67:82)] 
-
-# Changing the missing value to NA 
-# dgd_min[dgd_min == ""] <- NA
 
 #### Lat and long #####
 
@@ -126,7 +113,9 @@ for (i in 1:nrow(dgd_min)){
 }
 
 dgd_min$COUNTRY[dgd_min$COUNTRY == "Belgium"] <- "Other"
+
 # Divide into different categories of budget
+
 dgd_min$BUDGET <- NA
 dgd_min$BUDGET[dgd_min$TOTAL_BUDGET > 10000000 & !is.na(dgd_min$TOTAL_BUDGET)] <-'Larger than ten million euros'
 dgd_min$BUDGET[dgd_min$TOTAL_BUDGET <= 10000000 & !is.na(dgd_min$TOTAL_BUDGET)] <-'Smaller than ten million euros'
@@ -144,16 +133,13 @@ dgd_min$TYPOLOGY <- str_replace_all(dgd_min$TYPOLOGY, "Core support to NGOs, oth
 
 # Make country and lat-long as individual columns ####
 
-
-dgd_min <- dgd_min %>% select(c(1,2,5:8, 10:14, 20:23, 26:28, 30:38, 41:44))
-dgd_min[,32:(31+nrow(lat_long))] <- NA
-colnames(dgd_min)[32:(31+nrow(lat_long))] <- lat_long$Country
-
-colnames(dgd_min)[34] <- "Other"
-        
+dgd_min <- dgd_min %>% select(c(1,2,5:8, 10:14, 20:23, 26:28, 30:38, 40:44))
+dgd_min[,(ncol(dgd_min_v2)+1):(ncol(dgd_min_v2)+nrow(lat_long))] <- NA
+colnames(dgd_min)[(ncol(dgd_min_v2)+1):(ncol(dgd_min_v2)+nrow(lat_long))] <- lat_long$Country
+colnames(dgd_min)[str_which(colnames(dgd_min), "Belgium")] <- "Other"
 
 for(i in seq_len(nrow(dgd_min))){
-        for (j in 32:104){
+        for (j in (ncol(dgd_min_v2)+1):(ncol(dgd_min_v2)+nrow(lat_long))){
                 if(dgd_min$COUNTRY[i] == colnames(dgd_min)[j]){
                         dgd_min[i,j] <- dgd_min$COUNTRY[i]
                 }
@@ -183,22 +169,73 @@ dgd_min <- bind_cols(dgd_min, x_lat, x_long)
 
 # Add year column ####
 
+list_year <- union(levels(as.factor(dgd_min$`first-year-exp`)), levels(as.factor(dgd_min$`last-year-exp`)))
+dgd_min[,(ncol(dgd_min)+1):(ncol(dgd_min)+length(list_year))] <- NA
+colnames(dgd_min)[(ncol(dgd_min)+1-length(list_year)):(ncol(dgd_min))] <- levels(as.factor(list_year))
 
+for(i in seq_len(nrow(dgd_min))){
+    for (j in (ncol(dgd_min)+1-length(list_year)):(ncol(dgd_min))){
+        if(between(as.numeric(colnames(dgd_min[,j])),as.numeric(dgd_min$`first-year-exp`[i]), as.numeric(dgd_min$`last-year-exp`[i]))){
+            dgd_min[i,j] <- as.numeric(colnames(dgd_min[,j]))
+        }
+    }
+}
 
 
 # Add Top sector ####
 
+old1 <- c("Agriculture, forestry, fishing \\(31xxx\\)", "Energy \\(23xxx\\)", "Environmental protection \\(41xxx\\)", 
+          "Multisector \\(43xxx\\)", "Transport and storage \\(21xxx\\)", "Water and sanitation \\(14xxx\\)")
+new1 <- c("Agriculture, forestry, fishing", "Energy", "Environmental protection", 
+          "Multisector", "Transport and storage", "Water and sanitation")
 
+for (i in 1:nrow(dgd_min)){
+    for (j in 1:length(old1)){
+        dgd_min$`TOP SECTOR`[i] <- str_replace_all(dgd_min$`TOP SECTOR`[i], old1[j], new1[j])
+    }
+}
+
+list_topsector <- levels(as.factor(dgd_min$`TOP SECTOR`))
+dgd_min[,(ncol(dgd_min)+1):(ncol(dgd_min)+length(list_topsector))] <- NA
+colnames(dgd_min)[(ncol(dgd_min)+1-length(list_topsector)):(ncol(dgd_min))] <- levels(as.factor(list_topsector))
+
+for(i in seq_len(nrow(dgd_min))){
+    for (j in (ncol(dgd_min)+1-length(list_topsector)):(ncol(dgd_min))){
+        if(dgd_min$`TOP SECTOR`[i] == colnames(dgd_min)[j]){
+            dgd_min[i,j] <- dgd_min$`TOP SECTOR`[i]
+        }
+    }
+}
 
 # Add Type of Aid #### 
 
+list_typology <- levels(as.factor(dgd_min$TYPOLOGY))
+dgd_min[,(ncol(dgd_min)+1):(ncol(dgd_min)+length(list_typology))] <- NA
+colnames(dgd_min)[(ncol(dgd_min)+1-length(list_typology)):(ncol(dgd_min))] <- levels(as.factor(list_typology))
 
+for(i in seq_len(nrow(dgd_min))){
+    for (j in (ncol(dgd_min)+1-length(list_typology)):(ncol(dgd_min))){
+        if(dgd_min$TYPOLOGY[i] == colnames(dgd_min)[j] & !is.na(dgd_min$TYPOLOGY[i])){
+            dgd_min[i,j] <- dgd_min$TYPOLOGY[i]
+        }
+    }
+}
 
+# Add sector #### 
 
-# save files 
+list_sector <- levels(as.factor(dgd_min$SECTOR))
+dgd_min[,(ncol(dgd_min)+1):(ncol(dgd_min)+length(list_sector))] <- NA
+colnames(dgd_min)[(ncol(dgd_min)+1-length(list_sector)):(ncol(dgd_min))] <- levels(as.factor(list_sector))
+
+for(i in seq_len(nrow(dgd_min))){
+    for (j in (ncol(dgd_min)+1-length(list_sector)):(ncol(dgd_min))){
+        if(dgd_min$SECTOR[i] == colnames(dgd_min)[j]){
+            dgd_min[i,j] <- dgd_min$SECTOR[i]
+        }
+    }
+}
+
+# save files ####
 
 write.csv(dgd_min, "dgd_min.csv", row.names = FALSE)
 write_feather(dgd_min, "dgd_min.feather")
-
-write.csv(dgd_min_v2, "dgd_min_v2.csv", row.names = FALSE)
-write_feather(dgd_min_v2, "dgd_min_v2.feather")
